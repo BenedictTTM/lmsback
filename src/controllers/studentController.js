@@ -97,71 +97,71 @@ const getQuizResults = async (req, res) => {
  * Fetch a Quiz by ID with Questions
  */
 const getQuizById = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        // Fetch quiz details
-        const quizResult = await pool.query(
-            "SELECT id, title, duration_minutes, due_date FROM quizzes WHERE id = $1",
-            [id]
-        );
+    // Fetch quiz details
+    const quizResult = await pool.query(
+      "SELECT id, title, duration_minutes, due_date FROM quizzes WHERE id = $1",
+      [id]
+    );
 
-        if (quizResult.rows.length === 0) {
-            return res.status(404).json({ message: "Quiz not found" });
-        }
-
-        const quiz = quizResult.rows[0];
-
-        // Fetch questions for the quiz
-        const questionsResult = await pool.query(
-            "SELECT id, question_text, question_type, options, correct_answers FROM questions WHERE quiz_id = $1",
-            [id]
-        );
-
-        if (questionsResult.rows.length === 0) {
-            return res.status(404).json({ message: "No questions found for this quiz." });
-        }
-
-        // Properly parse options and correct_answers
-        quiz.questions = questionsResult.rows.map((q) => {
-            let options = [];
-            let correct_answers = [];
-
-            try {
-                // Ensure options are parsed properly
-                options = typeof q.options === "string" ? JSON.parse(q.options) : q.options;
-            } catch (err) {
-                console.error("Invalid JSON format for options:", q.options);
-                options = q.options ? q.options.split(",") : [];
-            }
-
-            try {
-                // Ensure correct answers are parsed properly
-                correct_answers = typeof q.correct_answers === "string" ? JSON.parse(q.correct_answers) : q.correct_answers;
-            } catch (err) {
-                console.error("Invalid JSON format for correct_answers:", q.correct_answers);
-                correct_answers = q.correct_answers ? q.correct_answers.split(",") : [];
-            }
-
-            return {
-                id: q.id,
-                text: q.question_text,
-                type: q.question_type,
-                options,
-                correct_answers,
-            };
-        });
-
-        return res.status(200).json(quiz);
-    } catch (error) {
-        console.error("Error fetching quiz:", error);
-        return res.status(500).json({ message: "Error fetching quiz", error: error.message });
+    if (quizResult.rows.length === 0) {
+      return res.status(404).json({ message: "Quiz not found" });
     }
+
+    const quiz = quizResult.rows[0];
+
+    // Fetch questions for the quiz
+    const questionsResult = await pool.query(
+      "SELECT id, question_text, question_type, options, correct_answers FROM questions WHERE quiz_id = $1",
+      [id]
+    );
+
+    if (questionsResult.rows.length === 0) {
+      return res.status(404).json({ message: "No questions found for this quiz." });
+    }
+
+    // Properly parse options and correct_answers
+    quiz.questions = questionsResult.rows.map((q) => {
+      let options = [];
+      let correct_answers = [];
+
+      try {
+        // Ensure options are parsed properly
+        options = typeof q.options === "string" ? JSON.parse(q.options) : q.options;
+      } catch (err) {
+        console.error("Invalid JSON format for options:", q.options);
+        options = q.options ? q.options.split(",") : [];
+      }
+
+      try {
+        // Ensure correct answers are parsed properly
+        correct_answers = typeof q.correct_answers === "string" ? JSON.parse(q.correct_answers) : q.correct_answers;
+      } catch (err) {
+        console.error("Invalid JSON format for correct_answers:", q.correct_answers);
+        correct_answers = q.correct_answers ? q.correct_answers.split(",") : [];
+      }
+
+      return {
+        id: q.id,
+        text: q.question_text,
+        type: q.question_type,
+        options,
+        correct_answers,
+      };
+    });
+
+    return res.status(200).json(quiz);
+  } catch (error) {
+    console.error("Error fetching quiz:", error);
+    return res.status(500).json({ message: "Error fetching quiz", error: error.message });
+  }
 };
 
 
-  
-  
+
+
 
 /**
  * Fetch Assignments
@@ -235,71 +235,71 @@ const createQuizTables = async () => {
  * Submit Quiz
  */
 const submitQuiz = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { answers, forcedSubmission } = req.body;
-        const studentId = parseInt(req.user.id); // Ensure it's an integer
+  try {
+    const { id } = req.params;
+    const { answers, forcedSubmission } = req.body;
+    const studentId = parseInt(req.user.id); // Ensure it's an integer
 
-        console.log('Student ID:', studentId, 'Type:', typeof studentId);
-        console.log('Quiz ID:', id);
+    console.log('Student ID:', studentId, 'Type:', typeof studentId);
+    console.log('Quiz ID:', id);
 
-        // Check if student has already submitted this quiz
-        const existingResult = await pool.query(
-            "SELECT * FROM quiz_results WHERE student_id = $1 AND quiz_id = $2",
-            [studentId, id]
+    // Check if student has already submitted this quiz
+    const existingResult = await pool.query(
+      "SELECT * FROM quiz_results WHERE student_id = $1 AND quiz_id = $2",
+      [studentId, id]
+    );
+
+    if (existingResult.rows.length > 0) {
+      return res.status(400).json({
+        message: "You have already submitted this quiz",
+        result: existingResult.rows[0]
+      });
+    }
+
+    // Fetch quiz questions with correct answers
+    const questionsResult = await pool.query(
+      "SELECT id, question_text, question_type, correct_answers FROM questions WHERE quiz_id = $1",
+      [id]
+    );
+
+    let correctAnswers = 0;
+    const totalQuestions = questionsResult.rows.length;
+
+    // Calculate score
+    const questionDetails = questionsResult.rows.map(question => {
+      const studentAnswer = answers[question.id] || '';
+      let correctAnswer;
+
+      try {
+        correctAnswer = typeof question.correct_answers === 'string'
+          ? JSON.parse(question.correct_answers)
+          : question.correct_answers;
+      } catch (err) {
+        console.error("Error parsing correct answers:", err);
+        correctAnswer = question.correct_answers;
+      }
+
+      const isCorrect = Array.isArray(correctAnswer) &&
+        correctAnswer.some(ans =>
+          ans.toLowerCase().trim() === studentAnswer.toLowerCase().trim()
         );
 
-        if (existingResult.rows.length > 0) {
-            return res.status(400).json({ 
-                message: "You have already submitted this quiz",
-                result: existingResult.rows[0]
-            });
-        }
+      if (isCorrect) correctAnswers++;
 
-        // Fetch quiz questions with correct answers
-        const questionsResult = await pool.query(
-            "SELECT id, question_text, question_type, correct_answers FROM questions WHERE quiz_id = $1",
-            [id]
-        );
+      return {
+        question: question.question_text,
+        type: question.question_type,
+        studentAnswer,
+        correctAnswer: Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer,
+        isCorrect
+      };
+    });
 
-        let correctAnswers = 0;
-        const totalQuestions = questionsResult.rows.length;
-        
-        // Calculate score
-        const questionDetails = questionsResult.rows.map(question => {
-            const studentAnswer = answers[question.id] || '';
-            let correctAnswer;
-            
-            try {
-                correctAnswer = typeof question.correct_answers === 'string' 
-                    ? JSON.parse(question.correct_answers) 
-                    : question.correct_answers;
-            } catch (err) {
-                console.error("Error parsing correct answers:", err);
-                correctAnswer = question.correct_answers;
-            }
+    const score = (correctAnswers / totalQuestions) * 100;
 
-            const isCorrect = Array.isArray(correctAnswer) && 
-                correctAnswer.some(ans => 
-                    ans.toLowerCase().trim() === studentAnswer.toLowerCase().trim()
-                );
-
-            if (isCorrect) correctAnswers++;
-
-            return {
-                question: question.question_text,
-                type: question.question_type,
-                studentAnswer,
-                correctAnswer: Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer,
-                isCorrect
-            };
-        });
-
-        const score = (correctAnswers / totalQuestions) * 100;
-
-        // Save quiz result with explicit type casting
-        await pool.query(
-            `INSERT INTO quiz_results 
+    // Save quiz result with explicit type casting
+    await pool.query(
+      `INSERT INTO quiz_results 
             (student_id, quiz_id, score, correct_answers, total_questions, forced_submission) 
             SELECT $1::integer, $2::integer, $3::numeric, $4::integer, $5::integer, $6::boolean
             WHERE EXISTS (
@@ -312,53 +312,53 @@ const submitQuiz = async (req, res) => {
                 SELECT 1 FROM information_schema.columns 
                 WHERE table_name = 'quiz_results' AND column_name = 'forced_submission'
             )`,
-            [
-                studentId, 
-                id, 
-                score, 
-                correctAnswers,
-                totalQuestions,
-                forcedSubmission || false
-            ]
-        );
+      [
+        studentId,
+        id,
+        score,
+        correctAnswers,
+        totalQuestions,
+        forcedSubmission || false
+      ]
+    );
 
-        res.status(200).json({ 
-            message: forcedSubmission ? 
-                "Quiz submitted automatically due to multiple warnings" : 
-                "Quiz submitted successfully",
-            score,
-            correctAnswers,
-            totalQuestions,
-            questionDetails,
-            forcedSubmission: forcedSubmission || false
-        });
-    } catch (error) {
-        console.error("Error submitting quiz:", error);
-        res.status(500).json({ 
-            message: "Error submitting quiz",
-            error: error.message 
-        });
-    }
+    res.status(200).json({
+      message: forcedSubmission ?
+        "Quiz submitted automatically due to multiple warnings" :
+        "Quiz submitted successfully",
+      score,
+      correctAnswers,
+      totalQuestions,
+      questionDetails,
+      forcedSubmission: forcedSubmission || false
+    });
+  } catch (error) {
+    console.error("Error submitting quiz:", error);
+    res.status(500).json({
+      message: "Error submitting quiz",
+      error: error.message
+    });
+  }
 };
 
 const getQuizResult = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const studentId = parseInt(req.user.id);
+  try {
+    const { id } = req.params;
+    const studentId = parseInt(req.user.id);
 
-        const result = await pool.query(
-            "SELECT * FROM quiz_results WHERE quiz_id = $1 AND student_id = $2",
-            [id, studentId]
-        );
+    const result = await pool.query(
+      "SELECT * FROM quiz_results WHERE quiz_id = $1 AND student_id = $2",
+      [id, studentId]
+    );
 
-        res.json({
-            hasCompleted: result.rows.length > 0,
-            result: result.rows[0] || null
-        });
-    } catch (error) {
-        console.error("Error checking quiz result:", error);
-        res.status(500).json({ message: "Error checking quiz result" });
-    }
+    res.json({
+      hasCompleted: result.rows.length > 0,
+      result: result.rows[0] || null
+    });
+  } catch (error) {
+    console.error("Error checking quiz result:", error);
+    res.status(500).json({ message: "Error checking quiz result" });
+  }
 };
 
 const getAllStudents = async (req, res) => {
@@ -389,7 +389,7 @@ const getAllStudents = async (req, res) => {
 const getStudentDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Get student info
     const studentInfo = await pool.query(`
       SELECT first_name, last_name, email, username, created_at
@@ -461,11 +461,11 @@ const getProfile = async (req, res) => {
       'SELECT first_name, last_name, email, username, profile_picture FROM users WHERE id = $1',
       [studentId]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Profile not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching profile:', error);
@@ -477,12 +477,12 @@ const updateProfile = async (req, res) => {
   try {
     const studentId = parseInt(req.user.id);
     const { first_name, last_name, email } = req.body;
-    
+
     await pool.query(
       'UPDATE users SET first_name = $1, last_name = $2, email = $3 WHERE id = $4',
       [first_name, last_name, email, studentId]
     );
-    
+
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
     console.error('Error updating profile:', error);
@@ -493,7 +493,7 @@ const updateProfile = async (req, res) => {
 const updateProfilePicture = async (req, res) => {
   try {
     const studentId = parseInt(req.user.id);
-    
+
     // Check if file was uploaded
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -511,9 +511,9 @@ const updateProfilePicture = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json({ 
+    res.json({
       message: 'Profile picture updated successfully',
-      profile_picture: result.rows[0].profile_picture 
+      profile_picture: result.rows[0].profile_picture
     });
   } catch (error) {
     console.error('Error updating profile picture:', error);
