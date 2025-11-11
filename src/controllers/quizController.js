@@ -34,13 +34,17 @@ const createQuiz = async (req, res) => {
         );
       }
   
-      // Send email notification to all students
+      // Send response immediately
+      res.status(201).json({ message: "Quiz created successfully", quizId });
+
+      // Send email notifications asynchronously (don't wait for completion)
       const studentsResult = await pool.query(
         "SELECT email, first_name FROM users WHERE role = 'student'"
       );
 
+      // Send emails in background without blocking
       for (const student of studentsResult.rows) {
-        await sendEmail(
+        sendEmail(
           student.email,
           "New Quiz Available",
           `Dear ${student.first_name},
@@ -56,10 +60,10 @@ Please log in to attempt the quiz before the due date.
 
 Best regards,
 LMS Team`
-        );
+        ).catch(err => console.error(`Failed to send email to ${student.email}:`, err.message));
       }
 
-      return res.status(201).json({ message: "Quiz created successfully", quizId });
+      return;
     } catch (error) {
       console.error("Error creating quiz:", error);
       return res.status(500).json({ message: "Failed to create quiz", error: error.message });
