@@ -30,12 +30,19 @@ const uploadAssignment = async (req, res) => {
 
     console.log("Assignment inserted into DB:", result.rows[0]);
 
-    // Send email notifications
+    // Send response immediately
+    res.status(201).json({ 
+      message: "Assignment uploaded and students notified",
+      assignment: result.rows[0]
+    });
+
+    // Send email notifications asynchronously (don't wait for completion)
     try {
       const students = await pool.query("SELECT email, first_name FROM users WHERE role = 'student'");
 
+      // Send emails in background without blocking
       for (const student of students.rows) {
-        await sendEmail(
+        sendEmail(
           student.email,
           `New Assignment: ${title}`,
           `Dear ${student.first_name},
@@ -50,16 +57,13 @@ Please log in to the system to view and submit your assignment.
 
 Best regards,
 LMS Team`
-        );
+        ).catch(err => console.error(`Failed to send email to ${student.email}:`, err.message));
       }
     } catch (emailError) {
       console.error("Error sending emails:", emailError);
     }
 
-    res.status(201).json({ 
-      message: "Assignment uploaded successfully",
-      assignment: result.rows[0]
-    });
+    return;
 
   } catch (error) {
     console.error("Error in uploadAssignment:", error);
