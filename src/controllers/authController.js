@@ -38,14 +38,17 @@ const registerStudent = async (req, res) => {
       return res.status(500).json({ message: "Failed to register student." });
     }
 
-    // Send email notification
-    await sendEmail(
+    // Send response immediately
+    res.status(201).json({ message: "Student registered successfully", username });
+
+    // Send email notification asynchronously (don't wait for completion)
+    sendEmail(
       email,
       "Welcome to LMS - Your Login Credentials",
       `Dear ${first_name},\n\nWelcome to the Learning Management System!\n\nYour username is: ${username}\n\nUse this username and your PIN to log in.\n\nBest regards,\nLMS Team`
-    );
+    ).catch(err => console.error(`Failed to send welcome email to ${email}:`, err.message));
 
-    res.status(201).json({ message: "Student registered successfully", username });
+    return;
 
   } catch (error) {
     console.error("Registration Error:", error);

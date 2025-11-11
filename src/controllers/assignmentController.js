@@ -31,7 +31,7 @@ const uploadAssignment = async (req, res) => {
     console.log("Assignment inserted into DB:", result.rows[0]);
 
     // Send response immediately
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Assignment uploaded and students notified",
       assignment: result.rows[0]
     });
@@ -67,9 +67,9 @@ LMS Team`
 
   } catch (error) {
     console.error("Error in uploadAssignment:", error);
-    res.status(500).json({ 
-      message: "Failed to upload assignment", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to upload assignment",
+      error: error.message
     });
   }
 };
